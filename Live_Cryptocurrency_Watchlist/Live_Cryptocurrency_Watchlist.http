@@ -1,0 +1,6 @@
+@Live_Cryptocurrency_Watchlist_HostAddress = http://localhost:5125
+
+GET {{Live_Cryptocurrency_Watchlist_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
