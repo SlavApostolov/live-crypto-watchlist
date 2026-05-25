@@ -42,14 +42,19 @@ namespace Live_Cryptocurrency_Watchlist.Controllers
         }
 
         [HttpPost("coins")]
-        public IActionResult AddCoins([FromBody] SavedCoin newCoin)
+        public async Task<IActionResult> AddCoins([FromBody] SavedCoin newCoin)
         {
             if (newCoin == null || string.IsNullOrEmpty(newCoin.CoinId))
             {
                 return BadRequest("Invalid coin data.");
             }
 
+            decimal priceCheck = await _cryptoPriceService.GetPriceAsync(newCoin.CoinId);
+
             bool exist = _context.Users.Any(u => u.UserId == newCoin.UserId);
+
+            if(priceCheck == 0m)
+                return BadRequest($"We couldn't find a coin named '{newCoin.CoinId}'. Please check your spelling.");
 
             if (!exist)
             {
@@ -57,7 +62,8 @@ namespace Live_Cryptocurrency_Watchlist.Controllers
             }
 
             _context.SavedCoins.Add(newCoin);
-            _context.SaveChanges();
+            await _context.SaveChangesAsync(); 
+
             return Ok(newCoin);
         }
 
@@ -71,15 +77,23 @@ namespace Live_Cryptocurrency_Watchlist.Controllers
                 return BadRequest("Invalid user ID.");
             }
 
+            var coinNames = user.SavedCoins.Select(c => c.CoinId).ToList();
+
+            var bulkData = await _cryptoPriceService.GetBulkPricesAsync(coinNames);
+
             var portfolioData = new List<object>();
 
             foreach (var savedCoin in user.SavedCoins)
             {
-                decimal currentPrice = await _cryptoPriceService.GetPriceAsync(savedCoin.CoinId);
+                string safeName = savedCoin.CoinId.ToLower().Trim();
+
+                bool found = bulkData.TryGetValue(safeName, out var coinInfo);
+
                 portfolioData.Add(new
                 {
                     CoinId = savedCoin.CoinId,
-                    CurrentPrice = currentPrice
+                    CurrentPrice = found ? coinInfo.Price : 0m,
+                    ImageUrl = found ? coinInfo.ImageUrl : "https://cdn-icons-png.flaticon.com/512/888/888879.png"
                 });
             }
 
@@ -88,6 +102,21 @@ namespace Live_Cryptocurrency_Watchlist.Controllers
                 Username = user.Username,
                 Portfolio = portfolioData
             });
+        }
+
+        [HttpDelete("{userId}/coins/{coinId}")]
+        public async Task<IActionResult> DeleteCoin(int userId, string coinId)
+        {
+            var coinRemove = _context.SavedCoins.FirstOrDefault(c => c.UserId == userId && c.CoinId == coinId.ToLower().Trim());
+            if (coinRemove == null)
+            {
+                return NotFound("Coin not found in user's watchlist.");
+            }
+
+            _context.SavedCoins.Remove(coinRemove);
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = $"{coinId.ToUpper()} successfully removed."});
         }
     }
 }

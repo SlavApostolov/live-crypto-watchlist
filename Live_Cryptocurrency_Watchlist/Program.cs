@@ -31,6 +31,14 @@ namespace Live_Cryptocurrency_Watchlist
             builder.Services.AddHttpClient();
             builder.Services.AddScoped<CryptoPriceService>();
 
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy("AllowAll",
+                    policy => policy.AllowAnyOrigin()
+                                    .AllowAnyMethod()
+                                    .AllowAnyHeader());
+            });
+
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
@@ -46,8 +54,9 @@ namespace Live_Cryptocurrency_Watchlist
 
             app.UseHttpsRedirection();
 
-            app.UseAuthorization();
+            app.UseCors("AllowAll");
 
+            app.UseAuthorization();
 
             app.MapControllers();
 
