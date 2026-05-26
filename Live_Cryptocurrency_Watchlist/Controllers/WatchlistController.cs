@@ -93,7 +93,8 @@ namespace Live_Cryptocurrency_Watchlist.Controllers
                 {
                     CoinId = savedCoin.CoinId,
                     CurrentPrice = found ? coinInfo.Price : 0m,
-                    ImageUrl = found ? coinInfo.ImageUrl : "https://cdn-icons-png.flaticon.com/512/888/888879.png"
+                    ImageUrl = found ? coinInfo.ImageUrl : "https://cdn-icons-png.flaticon.com/512/888/888879.png",
+                    Amount = savedCoin.Amount
                 });
             }
 
@@ -118,5 +119,33 @@ namespace Live_Cryptocurrency_Watchlist.Controllers
 
             return Ok(new { message = $"{coinId.ToUpper()} successfully removed."});
         }
+
+        [HttpGet("coins/{coinId}/history")]
+        public async Task<IActionResult> GetCoinHistory(string coinId)
+        {
+            try
+            {
+                var history = await _cryptoPriceService.GetHistoricalDataAsync(coinId);
+                return Ok(history);
+            }
+            catch
+            {
+                return BadRequest("Failed to load historical data.");
+            }
+        }
+
+        [HttpPut("{userId}/coins/{coinId}")]
+        public async Task<IActionResult> UpdateCoinAmount(int userId, string coinId, [FromBody] decimal newAmount)
+        {
+            var coinToUpdate = _context.SavedCoins.FirstOrDefault(c => c.UserId == userId && c.CoinId == coinId.ToLower().Trim());
+
+            if (coinToUpdate == null) return NotFound("Coin not found.");
+
+            coinToUpdate.Amount = newAmount;
+            await _context.SaveChangesAsync();
+
+            return Ok(new { message = "Amount updated successfully!" });
+        }
+
     }
 }
