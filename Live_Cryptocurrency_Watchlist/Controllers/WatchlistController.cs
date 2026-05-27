@@ -21,6 +21,39 @@ namespace Live_Cryptocurrency_Watchlist.Controllers
             _cryptoPriceService = cryptoPriceService;
         }
 
+        [HttpPost("register")]
+        public async Task<IActionResult> RegisterUser([FromBody] User newUser)
+        {
+            if (newUser == null || string.IsNullOrEmpty(newUser.Username) || string.IsNullOrEmpty(newUser.Password))
+                return BadRequest("Username and Password are required.");
+
+            // Check if username is already taken
+            bool exists = _context.Users.Any(u => u.Username.ToLower() == newUser.Username.ToLower().Trim());
+            if (exists) return BadRequest("Username is already taken. Please choose another.");
+
+            _context.Users.Add(newUser);
+            await _context.SaveChangesAsync();
+
+            // Never send the password back to the frontend!
+            return Ok(new { UserId = newUser.UserId, Username = newUser.Username });
+        }
+
+        [HttpPost("login")]
+        public IActionResult LoginUser([FromBody] User loginData)
+        {
+            if (loginData == null || string.IsNullOrEmpty(loginData.Username) || string.IsNullOrEmpty(loginData.Password))
+                return BadRequest("Username and Password are required.");
+
+            // Find the user where BOTH username and password match
+            var existingUser = _context.Users.FirstOrDefault(u =>
+                u.Username.ToLower() == loginData.Username.ToLower().Trim() &&
+                u.Password == loginData.Password);
+
+            if (existingUser == null) return Unauthorized("Invalid username or password.");
+
+            return Ok(new { UserId = existingUser.UserId, Username = existingUser.Username });
+        }
+
         [HttpGet("users")]
         public IActionResult GetUser()
         {
@@ -49,7 +82,9 @@ namespace Live_Cryptocurrency_Watchlist.Controllers
                 return BadRequest("Invalid coin data.");
             }
 
-            decimal priceCheck = await _cryptoPriceService.GetPriceAsync(newCoin.CoinId);
+            string safeCoinId = newCoin.CoinId.ToLower().Trim();
+
+            decimal priceCheck = await _cryptoPriceService.GetPriceAsync(safeCoinId);
 
             bool exist = _context.Users.Any(u => u.UserId == newCoin.UserId);
 
@@ -61,7 +96,19 @@ namespace Live_Cryptocurrency_Watchlist.Controllers
                 return NotFound("User not found.");
             }
 
-            _context.SavedCoins.Add(newCoin);
+            var existingCoin = _context.SavedCoins.FirstOrDefault(c => c.UserId == newCoin.UserId && c.CoinId == safeCoinId);
+
+            if (existingCoin != null)
+            {
+                existingCoin.Amount += newCoin.Amount;
+            }
+            else
+            {
+
+                newCoin.CoinId = safeCoinId;
+                _context.SavedCoins.Add(newCoin);
+            }
+
             await _context.SaveChangesAsync(); 
 
             return Ok(newCoin);
