@@ -5,7 +5,7 @@ COPY . .
 
 RUN dotnet publish "Live_Cryptocurrency_Watchlist.csproj" -c Release -o /app/publish
 
-RUN dotnet publish "Live_Cryptocurrency_Watchlist.csproj" -c Release -o /app/publish
+FROM mcr.microsoft.com/dotnet/aspnet:8.0 AS runtime
 WORKDIR /app
 
 COPY --from=build /app/publish .
