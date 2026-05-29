@@ -9,7 +9,7 @@ namespace Live_Cryptocurrency_Watchlist.Services
         public CryptoPriceService(HttpClient client)
         {
             _httpClient = client;
-            _httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+            _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
         }
 
         public async Task<decimal> GetPriceAsync(string coinId)
@@ -20,22 +20,34 @@ namespace Live_Cryptocurrency_Watchlist.Services
                 string apiUrl = $"https://api.coincap.io/v2/assets/{safeCoinId}";
 
                 var response = await _httpClient.GetAsync(apiUrl);
-                if (!response.IsSuccessStatusCode) return 0m;
+
+                if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+                {
+                    throw new KeyNotFoundException($"Coin '{coinId}' does not exist.");
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    return 0.01m;
+                }
 
                 var readingResponse = await response.Content.ReadAsStringAsync();
                 var jsonDoc = JsonDocument.Parse(readingResponse);
 
-                // CoinCap returns price as a string, so we must parse it
                 string priceString = jsonDoc.RootElement.GetProperty("data").GetProperty("priceUsd").GetString();
                 if (decimal.TryParse(priceString, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal price))
                 {
                     return price;
                 }
-                return 0m;
+                return 0.01m;
+            }
+            catch (KeyNotFoundException)
+            {
+                throw;
             }
             catch
             {
-                return 0m; 
+                return 0.01m;
             }
         }
 
