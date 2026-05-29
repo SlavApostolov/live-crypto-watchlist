@@ -13,6 +13,8 @@ namespace Live_Cryptocurrency_Watchlist.Services
         {
             _httpClient = client;
 
+            _apiKey = Environment.GetEnvironmentVariable("COINGECKO_API_KEY") ?? "";
+
             _httpClient.DefaultRequestHeaders.Add("x-cg-demo-api-key", _apiKey);
             _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
         }
