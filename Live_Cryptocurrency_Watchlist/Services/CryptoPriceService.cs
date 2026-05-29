@@ -6,9 +6,14 @@ namespace Live_Cryptocurrency_Watchlist.Services
     {
         private readonly HttpClient _httpClient;
 
+        // Put your copied API key right here!
+        private readonly string _apiKey = "";
+
         public CryptoPriceService(HttpClient client)
         {
             _httpClient = client;
+
+            _httpClient.DefaultRequestHeaders.Add("x-cg-demo-api-key", _apiKey);
             _httpClient.DefaultRequestHeaders.Add("Accept", "application/json");
         }
 
@@ -17,38 +22,26 @@ namespace Live_Cryptocurrency_Watchlist.Services
             try
             {
                 string safeCoinId = coinId.ToLower().Trim();
-                string apiUrl = $"https://api.coincap.io/v2/assets/{safeCoinId}";
+
+                string apiUrl = $"https://api.coingecko.com/api/v3/simple/price?ids={safeCoinId}&vs_currencies=usd";
 
                 var response = await _httpClient.GetAsync(apiUrl);
-
                 if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
-                {
                     throw new KeyNotFoundException($"Coin '{coinId}' does not exist.");
-                }
 
-                if (!response.IsSuccessStatusCode)
-                {
-                    return 0.01m;
-                }
+                if (!response.IsSuccessStatusCode) return 0.01m;
 
                 var readingResponse = await response.Content.ReadAsStringAsync();
                 var jsonDoc = JsonDocument.Parse(readingResponse);
 
-                string priceString = jsonDoc.RootElement.GetProperty("data").GetProperty("priceUsd").GetString();
-                if (decimal.TryParse(priceString, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal price))
+                if (jsonDoc.RootElement.TryGetProperty(safeCoinId, out JsonElement coinData))
                 {
-                    return price;
+                    return coinData.GetProperty("usd").GetDecimal();
                 }
                 return 0.01m;
             }
-            catch (KeyNotFoundException)
-            {
-                throw;
-            }
-            catch
-            {
-                return 0.01m;
-            }
+            catch (KeyNotFoundException) { throw; }
+            catch { return 0.01m; }
         }
 
         public async Task<Dictionary<string, CoinData>> GetBulkPricesAsync(List<string> coinIds)
@@ -59,7 +52,7 @@ namespace Live_Cryptocurrency_Watchlist.Services
             try
             {
                 string joinedIds = string.Join(",", coinIds).ToLower();
-                string apiUrl = $"https://api.coincap.io/v2/assets?ids={joinedIds}";
+                string apiUrl = $"https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&ids={joinedIds}";
 
                 var response = await _httpClient.GetAsync(apiUrl);
                 if (!response.IsSuccessStatusCode) return results;
@@ -67,27 +60,19 @@ namespace Live_Cryptocurrency_Watchlist.Services
                 var readingResponse = await response.Content.ReadAsStringAsync();
                 var jsonDoc = JsonDocument.Parse(readingResponse);
 
-                if (jsonDoc.RootElement.TryGetProperty("data", out JsonElement dataArray) && dataArray.ValueKind == JsonValueKind.Array)
+                if (jsonDoc.RootElement.ValueKind == JsonValueKind.Array)
                 {
-                    foreach (var coin in dataArray.EnumerateArray())
+                    foreach (var coin in jsonDoc.RootElement.EnumerateArray())
                     {
                         string id = coin.GetProperty("id").GetString();
-                        string symbol = coin.GetProperty("symbol").GetString().ToLower();
-                        string priceString = coin.GetProperty("priceUsd").GetString();
+                        decimal price = coin.GetProperty("current_price").GetDecimal();
+                        string imageUrl = coin.GetProperty("image").GetString();
 
-                        // CoinCap hosts icons using the symbol
-                        string imageUrl = $"https://assets.coincap.io/assets/icons/{symbol}@2x.png";
-
-                        if (decimal.TryParse(priceString, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal price))
-                        {
-                            results[id] = new CoinData { Price = price, ImageUrl = imageUrl };
-                        }
+                        results[id] = new CoinData { Price = price, ImageUrl = imageUrl };
                     }
                 }
             }
-            catch
-            {
-            }
+            catch { }
 
             return results;
         }
@@ -97,10 +82,7 @@ namespace Live_Cryptocurrency_Watchlist.Services
             var prices = new List<decimal[]>();
             try
             {
-                long end = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                long start = DateTimeOffset.UtcNow.AddDays(-days).ToUnixTimeMilliseconds();
-
-                string apiUrl = $"https://api.coincap.io/v2/assets/{coinId.ToLower().Trim()}/history?interval=h6&start={start}&end={end}";
+                string apiUrl = $"https://api.coingecko.com/api/v3/coins/{coinId.ToLower().Trim()}/market_chart?vs_currency=usd&days={days}";
 
                 var response = await _httpClient.GetAsync(apiUrl);
                 if (!response.IsSuccessStatusCode) return prices;
@@ -108,24 +90,15 @@ namespace Live_Cryptocurrency_Watchlist.Services
                 var readingResponse = await response.Content.ReadAsStringAsync();
                 using var jsonDoc = JsonDocument.Parse(readingResponse);
 
-                if (jsonDoc.RootElement.TryGetProperty("data", out JsonElement dataArray) && dataArray.ValueKind == JsonValueKind.Array)
+                if (jsonDoc.RootElement.TryGetProperty("prices", out JsonElement pricesElement) && pricesElement.ValueKind == JsonValueKind.Array)
                 {
-                    foreach (var item in dataArray.EnumerateArray())
+                    foreach (var item in pricesElement.EnumerateArray())
                     {
-                        long time = item.GetProperty("time").GetInt64();
-                        string priceStr = item.GetProperty("priceUsd").GetString();
-
-                        if (decimal.TryParse(priceStr, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out decimal priceVal))
-                        {
-                            prices.Add(new decimal[] { time, priceVal });
-                        }
+                        prices.Add(new decimal[] { item[0].GetDecimal(), item[1].GetDecimal() });
                     }
                 }
             }
-            catch
-            {
-
-            }
+            catch { }
 
             return prices;
         }
